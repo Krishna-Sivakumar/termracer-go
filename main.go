@@ -113,12 +113,17 @@ func getStats() (result Stats) {
 	return
 }
 
+/*
+	Writes resultant statistics to a file specified by pathname. If file doesn't exist, creates one.
+
+Need to fix permissions on created file to be accessible to everyone.
+*/
 func (stats *Stats) writeToFile(pathname string) {
 	os.WriteFile(
 		pathname,
 		[]byte(fmt.Sprintf("%s,%0.2fACC,%dWPM", string(state.runes), stats.accuracy, int(stats.wpm))),
 		os.ModeAppend)
-
+	os.Chmod(pathname, 0666)
 }
 
 /* Renders the UI to the screen. */
