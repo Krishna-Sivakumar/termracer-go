@@ -1,4 +1,4 @@
-module goracer
+module termracer-go
 
 go 1.22.4
 
