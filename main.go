@@ -113,6 +113,14 @@ func getStats() (result Stats) {
 	return
 }
 
+func (stats *Stats) writeToFile(pathname string) {
+	os.WriteFile(
+		pathname,
+		[]byte(fmt.Sprintf("%s,%0.2fACC,%dWPM", string(state.runes), stats.accuracy, int(stats.wpm))),
+		os.ModeAppend)
+
+}
+
 /* Renders the UI to the screen. */
 func render(screen tcell.Screen) {
 	limit := math.Min(float64(state.windowWidth), float64(len(state.runes)-state.cursorPosition))
@@ -218,10 +226,17 @@ func main() {
 		}
 	}
 
-	for {
+	final_stats := getStats()
+	final_stats.writeToFile("results.txt")
+
+	// get a final keypress before quitting. A resize might trigger this too, so check the type of event.
+
+	waitForKey := true
+	for waitForKey {
 		ev := <-eventChan
 		switch ev.(type) {
 		case *tcell.EventKey:
+			waitForKey = false
 			break
 		}
 	}
