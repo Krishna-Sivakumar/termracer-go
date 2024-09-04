@@ -103,8 +103,9 @@ func writeToDB(stats Statistics, state State) error {
 }
 
 type HistoryFormat struct {
-	rows    []DBOutputFormat
-	average float64
+	rows            []DBOutputFormat
+	average         float64
+	average10Window float64
 }
 
 func readFromDB() (history HistoryFormat, err error) {
@@ -135,6 +136,11 @@ func readFromDB() (history HistoryFormat, err error) {
 		rows, err = db.Query("select AVG(json_extract(stats, '$.Wpm')) from sprints;")
 		for rows.Next() {
 			rows.Scan(&history.average)
+		}
+
+		rows, err = db.Query("select AVG(wpm) from (select json_extract(stats, '$.Wpm') as wpm from sprints ORDER BY creation_time DESC LIMIT 10);")
+		for rows.Next() {
+			rows.Scan(&history.average10Window)
 		}
 	}
 

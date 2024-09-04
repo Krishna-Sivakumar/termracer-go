@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,15 +18,28 @@ import (
 )
 
 var (
-	state = State{windowWidth: 0, passageSource: "passages.txt"}
+	state = State{windowWidth: 0, passageSource: "none"}
 )
+
+//go:embed passages.txt
+var defaultTextfile embed.FS
 
 func readTextFromFile(file_path string) ([]rune, error) {
 	// get text from file
 	// this is not a streaming file implementation. Will fail for big files if it falls out of memory.
-	data, error := os.ReadFile(file_path)
-	if error != nil {
-		panic(error)
+
+	var data []byte
+	var error error
+	if file_path == "none" {
+		data, error = defaultTextfile.ReadFile("passages.txt")
+		if error != nil {
+			panic(error)
+		}
+	} else {
+		data, error = os.ReadFile(file_path)
+		if error != nil {
+			panic(error)
+		}
 	}
 
 	// pick a random line
@@ -235,7 +249,7 @@ type Flags struct {
 
 func FlagSetup() Flags {
 	historyFlag := flag.Bool("history", false, "view sprint history")
-	fileFlag := flag.String("file", "passages.txt", "Choose lines from a custom file")
+	fileFlag := flag.String("file", "none", "Choose lines from a custom file")
 
 	return Flags{
 		historyFlag: historyFlag,
@@ -262,6 +276,7 @@ func main() {
 				}
 				tbl.AddRow(row.Timestamp, strconv.FormatFloat(row.Accuracy, 'f', 2, 64)+"%", row.Wpm, strconv.Itoa(int(row.TimeTaken))+"s", row.Passage[:51]+passageTerminator)
 			}
+			fmt.Printf("Average WPM over the last 10 sprints: %0.2f\n", history.average10Window)
 			fmt.Printf("Average WPM over %d sprints: %0.2f\n\n", len(history.rows), history.average)
 			tbl.Print()
 		} else {
