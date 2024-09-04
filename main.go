@@ -20,13 +20,6 @@ var (
 	state = State{windowWidth: 0, passageSource: "passages.txt"}
 )
 
-var text string
-var text_runes []rune
-var cursor_position int
-
-const ADVANCE_SUCCESS = 1
-const ADVANCE_FAILURE = 0
-
 func readTextFromFile(file_path string) ([]rune, error) {
 	// get text from file
 	// this is not a streaming file implementation. Will fail for big files if it falls out of memory.
@@ -72,6 +65,9 @@ func readTextFromFile(file_path string) ([]rune, error) {
 
 	return make([]rune, 0), errors.New("File is empty.")
 }
+
+const ADVANCE_SUCCESS = 1
+const ADVANCE_FAILURE = 0
 
 /* Advances the cursor if the rune entered matches the rune at the cursor's position and returns ADVANCE_SUCCESS. Else, returns ADVANCE_FAILURE. */
 func advanceCursor(char_typed rune) int {
