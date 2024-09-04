@@ -2,27 +2,22 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"math"
 	"math/rand"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/gdamore/tcell"
+	"github.com/rodaine/table"
 )
 
-type State struct {
-	runes            []rune
-	cursorPosition   int
-	windowWidth      int
-	keysPressed      int
-	wrongKeysPressed int
-	timeStarted      int64
-}
-
 var (
-	state = State{windowWidth: 0}
+	state = State{windowWidth: 0, passageSource: "passages.txt"}
 )
 
 var text string
@@ -89,41 +84,23 @@ func advanceCursor(char_typed rune) int {
 	return ADVANCE_FAILURE
 }
 
-type Stats struct {
-	accuracy float64
-	wpm      float64
-}
-
 /* Returns a collection of statistics as a Stats struct, computed from the current state.  */
 // would be a good idea to make this a pure function, but for now it's ok to keep it dependent to `state`.
-func getStats() (result Stats) {
-	result.accuracy = 0.0
-	result.wpm = 0.0
+func getStats() (result Statistics) {
+	result.Accuracy = 0.0
+	result.Wpm = 0.0
 
 	if state.keysPressed > 0 {
 
-		result.accuracy = 100 * (1 - float64(state.wrongKeysPressed)/float64(state.keysPressed))
+		result.Accuracy = 100 * (1 - float64(state.wrongKeysPressed)/float64(state.keysPressed))
 
 		time_diff := float64(time.Now().Unix() - state.timeStarted)
 		if time_diff > 0 {
-			result.wpm = 60 * (float64(state.keysPressed) / 5) / time_diff
+			result.Wpm = 60 * (float64(state.keysPressed) / 5) / time_diff
 		}
 	}
 
 	return
-}
-
-/*
-	Writes resultant statistics to a file specified by pathname. If file doesn't exist, creates one.
-
-Need to fix permissions on created file to be accessible to everyone.
-*/
-func (stats *Stats) writeToFile(pathname string) {
-	os.WriteFile(
-		pathname,
-		[]byte(fmt.Sprintf("%s,%0.2fACC,%dWPM", string(state.runes), stats.accuracy, int(stats.wpm))),
-		os.ModeAppend)
-	os.Chmod(pathname, 0666)
 }
 
 /* Renders the UI to the screen. */
@@ -131,8 +108,8 @@ func render(screen tcell.Screen) {
 	limit := math.Min(float64(state.windowWidth), float64(len(state.runes)-state.cursorPosition))
 	stats := getStats()
 
-	accuracy_runes := []rune(fmt.Sprintf("Accuracy: %0.2f", stats.accuracy))
-	wpm_runes := []rune(fmt.Sprintf("WPM: %d", int(stats.wpm)))
+	accuracy_runes := []rune(fmt.Sprintf("Accuracy: %0.2f", stats.Accuracy))
+	wpm_runes := []rune(fmt.Sprintf("WPM: %d", int(stats.Wpm)))
 
 	sprint_completed_message := []rune("Sprint complete. Press any key to exit!")
 
@@ -169,9 +146,14 @@ func eventGenerator(eventChan chan tcell.Event, screen tcell.Screen) {
 	}
 }
 
-func main() {
+/*
+Starts a practice sprint. First initializes the screen, and then listens for events from the screen.
+The results from a practice sprint are written to the DB.
+Will need to separate out the screen initialization from this function and put it into main for future multiplayer use.
+*/
+func practice() {
 	// setup
-	line, error := readTextFromFile("passages.txt")
+	line, error := readTextFromFile(state.passageSource)
 	if error != nil {
 		panic("file is empty.")
 	} else {
@@ -231,11 +213,14 @@ func main() {
 		}
 	}
 
+	state.timeTaken = time.Now().Unix() - state.timeStarted
+
 	final_stats := getStats()
-	final_stats.writeToFile("results.txt")
+	if err := writeToDB(final_stats, state); err != nil {
+		panic(err)
+	}
 
-	// get a final keypress before quitting. A resize might trigger this too, so check the type of event.
-
+	// get a final keypress before quitting.
 	waitForKey := true
 	for waitForKey {
 		ev := <-eventChan
@@ -245,4 +230,52 @@ func main() {
 			break
 		}
 	}
+}
+
+type Flags struct {
+	historyFlag *bool
+	fileFlag    *string
+}
+
+func FlagSetup() Flags {
+	historyFlag := flag.Bool("history", false, "view sprint history")
+	fileFlag := flag.String("file", "passages.txt", "Choose lines from a custom file")
+
+	return Flags{
+		historyFlag: historyFlag,
+		fileFlag:    fileFlag,
+	}
+}
+
+func main() {
+	flags := FlagSetup()
+	flag.Parse()
+
+	if *flags.historyFlag {
+		headerFmt := color.New(color.FgWhite, color.BgBlack, color.Bold).SprintfFunc()
+		columnFmt := color.New(color.FgWhite, color.BgBlack).SprintfFunc()
+
+		tbl := table.New("Timestamp", "Accuracy", "WPM", "Time Taken", "Passage")
+		tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
+
+		if history, err := readFromDB(); err == nil {
+			for _, row := range history.rows {
+				passageTerminator := ""
+				if len(row.Passage) > 50 {
+					passageTerminator = "..."
+				}
+				tbl.AddRow(row.Timestamp, strconv.FormatFloat(row.Accuracy, 'f', 2, 64)+"%", row.Wpm, strconv.Itoa(int(row.TimeTaken))+"s", row.Passage[:51]+passageTerminator)
+			}
+			fmt.Printf("Average WPM over %d sprints: %0.2f\n\n", len(history.rows), history.average)
+			tbl.Print()
+		} else {
+			panic(err)
+		}
+
+		return
+	}
+
+	state.passageSource = *flags.fileFlag
+
+	practice()
 }
