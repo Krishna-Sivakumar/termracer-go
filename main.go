@@ -2,7 +2,6 @@ package main
 
 import (
 	"embed"
-	"errors"
 	"flag"
 	"fmt"
 	"math"
@@ -21,6 +20,26 @@ var (
 	state = State{windowWidth: 0, passageSource: "none"}
 )
 
+/* Error Section */
+
+type FileError struct {
+	file string
+}
+
+func (err *FileError) Error() string {
+	return fmt.Sprintf("could not open %s", err.file)
+}
+
+type EmptyFileError struct {
+	file string
+}
+
+func (err *EmptyFileError) Error() string {
+	return fmt.Sprintf("%s is empty.", err.file)
+}
+
+/* End Error Section */
+
 //go:embed passages.txt
 var defaultTextfile embed.FS
 
@@ -33,12 +52,12 @@ func readTextFromFile(file_path string) ([]rune, error) {
 	if file_path == "none" {
 		data, error = defaultTextfile.ReadFile("passages.txt")
 		if error != nil {
-			panic(error)
+			return nil, &FileError{file_path}
 		}
 	} else {
 		data, error = os.ReadFile(file_path)
 		if error != nil {
-			panic(error)
+			return nil, &FileError{file_path}
 		}
 	}
 
@@ -53,7 +72,7 @@ func readTextFromFile(file_path string) ([]rune, error) {
 	}
 
 	if line_count == 0 {
-		return make([]rune, 0), errors.New("File is empty.")
+		return make([]rune, 0), &EmptyFileError{file: file_path}
 	}
 
 	raw_random = raw_random % line_count
@@ -77,7 +96,7 @@ func readTextFromFile(file_path string) ([]rune, error) {
 		}
 	}
 
-	return make([]rune, 0), errors.New("File is empty.")
+	return make([]rune, 0), &EmptyFileError{file: file_path}
 }
 
 const ADVANCE_SUCCESS = 1
@@ -111,6 +130,12 @@ func getStats() (result Statistics) {
 	}
 
 	return
+}
+
+func renderError(errorMessage string, screen tcell.Screen) {
+	runes := []rune(errorMessage)
+	screen.SetContent(0, 0, runes[0], runes[1:], tcell.StyleDefault)
+	screen.Sync()
 }
 
 /* Renders the UI to the screen. */
@@ -184,11 +209,15 @@ Will need to separate out the screen initialization from this function and put i
 func practice() {
 	// setup
 	line, error := readTextFromFile(state.passageSource)
-	if error != nil {
-		panic("file is empty.")
-	} else {
-		state.runes = line
+	switch error.(type) {
+	case *FileError:
+		fmt.Println(error.Error())
+		return
+	case *EmptyFileError:
+		fmt.Println(error.Error())
+		return
 	}
+	state.runes = line
 
 	state.cursorPosition = 0
 	// end setup
@@ -196,14 +225,16 @@ func practice() {
 	// initialize screen
 	screen, err := tcell.NewScreen()
 	if err != nil {
-		panic("problems initializing tcell")
+		fmt.Println("problems initializing the screen.")
+		return
 	}
 
 	defer screen.Fini()
 
 	err = screen.Init()
 	if err != nil {
-		panic("problems initializing tcell")
+		fmt.Println("problems initializing the screen.")
+		return
 	}
 
 	screen.Clear()
@@ -256,7 +287,7 @@ func practice() {
 
 	final_stats := getStats()
 	if err := writeToDB(final_stats, state); err != nil {
-		panic(err)
+		renderError("Could not write results to the database. Reason: "+err.Error(), screen tcell.Screen)
 	}
 
 	// get a final keypress before quitting.
@@ -313,7 +344,7 @@ func main() {
 			fmt.Printf("Average WPM over %d sprints: %0.2f\n\n", len(history.rows), history.average)
 			tbl.Print()
 		} else {
-			panic(err)
+			fmt.Println("Couldn't access local DB for history.")
 		}
 
 		return
