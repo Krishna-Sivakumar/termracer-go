@@ -12,11 +12,13 @@ import (
 
 // Stores State and Statistics structs in an SQLite database for future use
 
+/* Represents a singular value in a collection of data points in a WPM rate graph. */
 type Checkpoint struct {
 	Seconds  int64
 	Progress int
 }
 
+/* Represents the current state of the program. */
 type State struct {
 	runes            []rune
 	cursorPosition   int
@@ -29,6 +31,7 @@ type State struct {
 	checkpoints      []Checkpoint
 }
 
+/* Represents the statistics of a sprint. */
 type Statistics struct {
 	Accuracy float64
 	Wpm      float64
@@ -50,6 +53,7 @@ func getEnv() {
 	envWasInitialized = true
 }
 
+/* Representation of a sprint in the database. */
 type DBInputFormat struct {
 	Wpm        float64
 	Accuracy   float64
@@ -58,6 +62,7 @@ type DBInputFormat struct {
 	Timestamps []Checkpoint
 }
 
+/* Represents the data that is extracted from the database. */
 type DBOutputFormat struct {
 	Timestamp string
 	Wpm       float64

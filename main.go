@@ -156,6 +156,26 @@ func eventGenerator(eventChan chan tcell.Event, screen tcell.Screen) {
 	}
 }
 
+func periodicCheckpointGenerator(checkpointChan chan Checkpoint) {
+	var nextCheckpoint = 1.0 / 10 // progress barrier at which a checkpoint needs to be generated
+	for state.cursorPosition < len(state.runes) {
+		progress := float64(state.cursorPosition) / float64(len(state.runes))
+		if progress >= nextCheckpoint {
+			nextCheckpoint += 1.0 / 10
+			checkpointChan <- Checkpoint{
+				Seconds:  time.Now().Unix() - state.timeStarted,
+				Progress: state.cursorPosition,
+			}
+		}
+	}
+	// Log one final checkpoint before wrapping up.
+	checkpointChan <- Checkpoint{
+		Seconds:  time.Now().Unix() - state.timeStarted,
+		Progress: state.cursorPosition,
+	}
+	close(checkpointChan)
+}
+
 /*
 Starts a practice sprint. First initializes the screen, and then listens for events from the screen.
 The results from a practice sprint are written to the DB.
@@ -191,8 +211,9 @@ func practice() {
 	state.timeStarted = time.Now().Unix()
 
 	eventChan := make(chan tcell.Event)
-	timeChan := time.Tick(250 * time.Millisecond)
+	checkpointChan := make(chan Checkpoint)
 	go eventGenerator(eventChan, screen)
+	go periodicCheckpointGenerator(checkpointChan)
 
 	var entered_rune rune
 	for state.cursorPosition < len(state.runes) {
@@ -216,17 +237,19 @@ func practice() {
 				w, _ := ev.Size()
 				state.windowWidth = w
 			}
-		case timestamp := <-timeChan:
-			state.checkpoints = append(state.checkpoints, Checkpoint{
-				Seconds:  timestamp.Unix() - state.timeStarted,
-				Progress: state.cursorPosition,
-			})
+		case checkpoint := <-checkpointChan:
+			state.checkpoints = append(state.checkpoints, checkpoint)
 		default:
 		}
 
 		if state.windowWidth > 0 {
 			render(screen)
 		}
+	}
+
+	// handle final checkpoint emitted
+	if checkpoint, ok := <-checkpointChan; ok {
+		state.checkpoints = append(state.checkpoints, checkpoint)
 	}
 
 	state.timeTaken = time.Now().Unix() - state.timeStarted
@@ -248,11 +271,15 @@ func practice() {
 	}
 }
 
+/* Represents the collection of command-line flags available. */
 type Flags struct {
 	historyFlag *bool
 	fileFlag    *string
 }
 
+/*
+Sets up a collection of command-line flags and their default values.
+*/
 func FlagSetup() Flags {
 	historyFlag := flag.Bool("history", false, "view sprint history")
 	fileFlag := flag.String("file", "none", "Choose lines from a custom file")
