@@ -12,6 +12,11 @@ import (
 
 // Stores State and Statistics structs in an SQLite database for future use
 
+type Checkpoint struct {
+	Seconds  int64
+	Progress int
+}
+
 type State struct {
 	runes            []rune
 	cursorPosition   int
@@ -21,6 +26,7 @@ type State struct {
 	timeStarted      int64
 	passageSource    string
 	timeTaken        int64
+	checkpoints      []Checkpoint
 }
 
 type Statistics struct {
@@ -45,10 +51,11 @@ func getEnv() {
 }
 
 type DBInputFormat struct {
-	Wpm       float64
-	Accuracy  float64
-	Passage   string
-	TimeTaken int64
+	Wpm        float64
+	Accuracy   float64
+	Passage    string
+	TimeTaken  int64
+	Timestamps []Checkpoint
 }
 
 type DBOutputFormat struct {
@@ -83,10 +90,11 @@ func writeToDB(stats Statistics, state State) error {
 		defer stmt.Close()
 
 		record := DBInputFormat{
-			Wpm:       stats.Wpm,
-			Accuracy:  stats.Accuracy,
-			Passage:   string(state.runes),
-			TimeTaken: state.timeTaken,
+			Wpm:        stats.Wpm,
+			Accuracy:   stats.Accuracy,
+			Passage:    string(state.runes),
+			TimeTaken:  state.timeTaken,
+			Timestamps: state.checkpoints,
 		}
 
 		record_marshalled, err := json.Marshal(record)

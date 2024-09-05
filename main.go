@@ -191,6 +191,7 @@ func practice() {
 	state.timeStarted = time.Now().Unix()
 
 	eventChan := make(chan tcell.Event)
+	timeChan := time.Tick(250 * time.Millisecond)
 	go eventGenerator(eventChan, screen)
 
 	var entered_rune rune
@@ -215,6 +216,11 @@ func practice() {
 				w, _ := ev.Size()
 				state.windowWidth = w
 			}
+		case timestamp := <-timeChan:
+			state.checkpoints = append(state.checkpoints, Checkpoint{
+				Seconds:  timestamp.Unix() - state.timeStarted,
+				Progress: state.cursorPosition,
+			})
 		default:
 		}
 
@@ -274,7 +280,7 @@ func main() {
 				if len(row.Passage) > 50 {
 					passageTerminator = "..."
 				}
-				tbl.AddRow(row.Timestamp, strconv.FormatFloat(row.Accuracy, 'f', 2, 64)+"%", row.Wpm, strconv.Itoa(int(row.TimeTaken))+"s", row.Passage[:51]+passageTerminator)
+				tbl.AddRow(row.Timestamp, strconv.FormatFloat(row.Accuracy, 'f', 2, 64)+"%", strconv.FormatFloat(row.Wpm, 'f', 2, 64), strconv.Itoa(int(row.TimeTaken))+"s", row.Passage[:51]+passageTerminator)
 			}
 			fmt.Printf("Average WPM over the last 10 sprints: %0.2f\n", history.average10Window)
 			fmt.Printf("Average WPM over %d sprints: %0.2f\n\n", len(history.rows), history.average)
